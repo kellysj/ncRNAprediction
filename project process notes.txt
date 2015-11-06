@@ -1,0 +1,130 @@
+http://www.biomedcentral.com/1756-0500/1/49
+relevant paper^^fisherRNA
+Process for thingyinjury 
+
+1. Downloading seqs from NCBI
+	used the ncbiquery python script - elaborate
+2. clustering seqs:
+	 $ usearch8.0.1623_i86linux32 -derep_fulllength cd_genbank.fa -strand both -fastaout unique_cd_genbank.fa
+		00:00  35Mb 1386 seqs, 1349 uniques, 1321 singletons (97.9%)
+		00:00  35Mb Min size 1, median 1, max 4, avg 1.03
+	$ usearch8.0.1623_i86linux32 -derep_fulllength haca_genbank.fa -strand both -fastaout unique_haca_genbank.fa
+		00:00  40Mb  100.0% Reading haca_genbank.fa
+		00:00  35Mb Min size 1, median 1, max 4, avg 1.20
+3. data selection:
+	
+4. Models
+	cd_uni_1_2,cd_uni_1_3,cd_uni_1_4,cd_uni_1_5
+	Starting parallel pool (parpool) using the 'local' profile ... connected to 4 workers.
+	M: 200
+	CRUM CLASSIFICATION train error: 12.19%
+	CRUM CLASSIFICATION test error: 17.41%
+	M: 200
+	CRUM CLASSIFICATION train error: 11.40%
+	CRUM CLASSIFICATION test error: 14.63%
+	M: 200
+	CRUM CLASSIFICATION train error: 10.24%
+	CRUM CLASSIFICATION test error: 12.22%
+	M: 200
+	CRUM CLASSIFICATION train error: 10.01%
+	CRUM CLASSIFICATION test error: 12.04%
+	
+	>> haca_uni_1_2,haca_uni_1_3,haca_uni_1_4,haca_uni_1_5
+	M: 200
+	CRUM CLASSIFICATION train error: 6.02%
+	CRUM CLASSIFICATION test error: 9.11%
+	M: 200
+	CRUM CLASSIFICATION train error: 5.49%
+	CRUM CLASSIFICATION test error: 7.48%
+	M: 200
+	CRUM CLASSIFICATION train error: 4.91%
+	CRUM CLASSIFICATION test error: 7.71%
+	M: 200
+	CRUM CLASSIFICATION train error: 5.20%
+	CRUM CLASSIFICATION test error: 7.01%
+	
+	NEW:
+	cd train = 2412
+	cd test = 268
+	cd total = 2680
+	CD k2
+	48	323
+	37	339
+	48	329
+	50	320
+	33	330
+	39	330
+	46	307
+	41	320
+	50	320
+	48	330
+	Means = 44.0000  324.8000
+	
+	CD k3
+	43	267
+	42	278
+	30	271
+	44	274
+	30	280
+	35	277
+	37	248
+	43	270
+	46	264
+	35	276
+	Means = 38.5000  270.5000
+	
+	CD k4
+	39	265
+	33	257
+	33	251
+	37	272
+	41	265
+	41	272
+	42	260
+	33	262
+	32	251
+	34	276
+	Means = 36.5000  263.1000
+	PercErr = 0.1362  0.1091
+	
+	haca train = 1926
+	haca test = 214
+	haca total = 1926
+	HACA k2
+	22	140
+	16	141
+	15	144
+	20	138
+	22	144
+	16	134
+	21	136
+	20	135
+	24	134
+	19	133
+	Means = 19.5000  137.9000
+	
+	HACA k3
+	17	125
+	14	126
+	15	123
+	23	124
+	15	138
+	22	116
+	19	113
+	25	115
+	18	133
+	16	130
+	Means = 18.4000  124.3000
+	
+	HACA k4
+	20	110
+	11	123
+	19	120
+	14	129
+	21	104
+	17	117
+	17	125
+	16	123
+	21	114
+	18	118
+	Means = 17.4000  118.3000
