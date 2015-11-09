@@ -1,4 +1,4 @@
-import snoPatternSplit,sys,re,random,negativeDataGen,trainHoldSplit,snoPatternSplit,subprocess
+import snoPatternSplit,sys,re,random,negativeDataGen,trainHoldSplit,snoPatternSplit,subprocess,fastaU,os
 
 hacaFastaHum = "seq/haca_human_snoRNA.fa"
 cdFastaHum = "seq/cd_human_snoRNA.fa"
@@ -6,193 +6,357 @@ hacaFastaGB = "seq/unique_haca_genbank.fa"
 cdFastaGB = "seq/unique_cd_genbank.fa"
 ncRNAGB = "seq/unique_rand_ncRNA_50-200_genbank.fa"
 allDNAGB = "seq/unique_rand_allDNA_50-200_genbank.fa"
+	
+	
+"""
+A function that writes the feature vectors as well as the type vectors to an m-file for matlab processing
+featuresIn = the feature vectors to write to the file
+headersIn = the headers associated with the sequences and features (not neccesarily used)
+nameOut = the name for the file and the matlab function to load it
+debug = boolean for printing debug data
+"""	
+def writeToMfile(featuresIn,typesIn,headersIn,nameOut,directory,debug):
+	totalData = featuresIn
+	mFileHeader = "function [X,t,header] = " + nameOut + "()\n"
+	mFileEnd = "end"
+	#generating strings for an m-file
+	fOut = "\tX={\n"
+	nRow = 0
+	counter = 0;
+	nItem = 0
+	#features
+	for item in featuresIn:
+		counter += 1
+		nItem += 1
+		fOut += "\t\t"
+		fOut += str(item)
+		if nItem<len(featuresIn):
+			fOut += ";\n"
+		else:
+			fOut += "\n\t};\n"
+	nItem = 0
+	tOut = "\tt={\n\t\t"
+	counter = 0;
+	#types
+	if type(typesIn[0]) is list:
+		for item in typesIn:
+			counter += 1
+			nItem += 1
+			tOut += str(item)
+			if nItem<len(typesIn):
+				tOut += ";"
+				if (counter%50)==0:
+					tOut += "\n\t\t"
+			else:
+				tOut += "\n\t};"
+	else:
+		for item in typesIn:
+			counter += 1
+			nItem += 1
+			tOut += " " + str(item) + " "
+			if nItem<len(typesIn):
+				tOut += ";"
+			else:
+				tOut += "\n\t};"
+	#headers
+	nItem = 0
+	hOut = "\n\theader={\n\t\t"
+	counter = 0;
+	for item in headersIn:
+		counter += 1
+		nItem += 1
+		hOut += "'" + item + "'"
+		if nItem<len(headersIn):
+			hOut += " ; "
+		else:
+			hOut += "\n\t};\n"
+	if debug >=1:
+		print tOut
+		print fOut	
+	mFile = open((directory+nameOut + ".m"), 'w')
+	mFile.write(mFileHeader)
+	mFile.write(fOut)
+	mFile.write(tOut)
+	mFile.write(hOut)
+	mFile.write(mFileEnd)
+	mFile.close()
+	return
+	
 
-#this is just a default function, needs to be rewritten for a 10fold validation
-#compiles positive data, generates and compiles negative data
-#creates holdout set and training set
-def crumDataGen(percHold,allIn,ncIn,typeIn,filePrefix,directory):
+def randomizeSeqs(heads,seqs):
+	seqOut = []
+	headOut = []
+	indices = range(len(heads))
+	random.shuffle(indices)
+	for n in indices:
+		seqOut.append(seqs[n])
+		headOut.append(heads[n])
+	return [headOut,seqOut]	
+
+def dataGen(percHold,allIn,ncIn,typeIn):
 	#build datasets for the models
 	#1. create postive and negative datasets
-	pHead,pSeq = trainHoldSplit.fastaRead(typeIn,True,True)
+	pHead,pSeq = fastaU.read(typeIn,True,False)
 	nHead,nSeq = negativeDataGen.compileData(len(pSeq),ncIn,40,allIn,40,True,20,True,False)
-	#holdout splits
-	pHeadTrain,pSeqTrain,pHeadHold,pSeqHold = trainHoldSplit.randomSelect(percHold,pHead,pSeq,True,True)
-	nHeadTrain,nSeqTrain,nHeadHold,nSeqHold = trainHoldSplit.randomSelect(percHold,nHead,nSeq,True,False)
+	#randomize the data
+	[pHead,pSeq] = randomizeSeqs(pHead,pSeq)
+	[nHead,nSeq] = randomizeSeqs(nHead,nSeq)
+	
+	return pHead,pSeq,nHead,nSeq
+	
+def foldSplit(split,heads,seqs,types):
+	lenSplit = len(heads)/split
+	if lenSplit*split<len(heads):
+		lenSplit += 1
+	headOut = [0]*split
+	seqOut = [0]*split
+	typesOut = [0]*split
+	i = 0
+	#print "len(headOut) = " + str(len(headOut))
+	for start in range(len(heads))[::lenSplit]:
+		end = start + lenSplit
+		#print "index is: " + str(i) + "\nstart is: " + str(start) + "\nend is: " + str(end)
+		if end<len(heads):
+			headOut[i] = heads[start:end]
+			seqOut[i] = seqs[start:end]
+			typesOut[i] = types[start:end]
+		else:
+			headOut[i] = heads[start:]
+			seqOut[i] = seqs[start:]
+			typesOut[i] = types[start:]
+		i += 1
+	return headOut,seqOut,typesOut
+	
+def writeCrumInput(trainHead,trainFeat,trainType,holdHead,holdFeat,holdType,directory,functionName):
+	
+	trainName = "FEAT_" + functionName + "_train"
+	holdName = "FEAT_" + functionName + "_hold"
 
-	#writing Fastas
-	trainHoldSplit.fastaWrite(pHeadTrain,pSeqTrain, directory + "DATA_"+  filePrefix + "_pos_train.fa")
-	trainHoldSplit.fastaWrite(pHeadHold,pSeqHold, directory +"DATA_"+  filePrefix + "_pos_hold.fa")
-	trainHoldSplit.fastaWrite(nHeadTrain,nSeqTrain, directory +"DATA_"+  filePrefix +"_neg_train.fa")
-	trainHoldSplit.fastaWrite(nHeadHold,nSeqHold, directory +"DATA_"+  filePrefix + "_neg_hold.fa")
-
-
-#creates an input for crum by splitting up data AND processing features
-def crumInputGen(kmerSize,directory,filePrefix,nHoldIn,pHoldIn,nTrainIn,pTrainIn):
-
-	pHeadTrain,pSeqTrain =  pTrainIn
-	pHeadHold,pSeqHold =  pHoldIn
-	nHeadTrain,nSeqTrain =  nTrainIn
-	nHeadHold,nSeqHold =  nHoldIn
-
-	posT = 1
-	negT = 0
-	#2. run feature selection
-	pFt,pTt = snoPatternSplit.featureFinder(pSeqTrain,posT,kmerSize,True,False)
-	nFt,nTt = snoPatternSplit.featureFinder(nSeqTrain,negT,kmerSize,True,False)
-	pFh,pTh = snoPatternSplit.featureFinder(pSeqHold,posT,kmerSize,True,False)
-	nFh,nTh = snoPatternSplit.featureFinder(nSeqHold,negT,kmerSize,True,False)
-
-	trainName = "FEAT" +  "_" + filePrefix+ "_" +  str(kmerSize).replace("-","n") + "_" + "all_train"
-	holdName = "FEAT" +  "_" + filePrefix+ "_" +  str(kmerSize).replace("-","n") + "_" + "all_hold"
-
-	snoPatternSplit.writeToMfile(pFt+nFt,pTt+nTt,pHeadTrain+nHeadTrain,trainName,directory,False)
-	snoPatternSplit.writeToMfile(pFh+nFh,pTh+nTh,pHeadHold+nHeadHold,holdName,directory,False)
-
-
-
-	nameOut = filePrefix
+	writeToMfile(trainFeat,trainType,trainHead,trainName,directory,False)
+	writeToMfile(holdFeat,holdType,holdHead,holdName,directory,False)
 
 	mTemplate = open("TEMPLATE_ncRNA_testing.m")
-	mFile = open((directory + nameOut + ".m"), 'w')
+	mFile = open((directory + functionName + ".m"), 'w')
 	for line in mTemplate:
-		line = line.replace("%FUNCTONNAME%",nameOut)
+		line = line.replace("%FUNCTONNAME%",functionName)
 		line = line.replace("%TRAINING%",trainName)
 		line = line.replace("%HOLDING%",holdName)
 		mFile.write(line)
 	mFile.close()
 	mTemplate.close()
-
-def SplitFasta(nSplit,FastaIn):
-	Head,Seq = trainHoldSplit.fastaRead(typeIn,True,True)
-	n = len(pSeq)
+	
+def makeDirectory(name):
+	FNULL = open(os.devnull, 'w')
+	directory = "./" + name + "/"
+	if subprocess.call(["ls", directory],stdout=FNULL, stderr=subprocess.STDOUT) == 0:
+		subprocess.call(["rm", "-r", directory])
+		subprocess.call(["mkdir", directory])
+		subprocess.call(["chmod", "+s",directory])
+	else:
+		subprocess.call(["mkdir", directory])
+		subprocess.call(["chmod", "+s",directory])		
 		
-
-#final function, runs everything
-def runCrumInputGen(filePrefix,typeFastaIn,kmerLen):
-	directory = "./" + filePrefix + "/"
-	if subprocess.call(["mkdir", directory]) == 0:
-		subprocess.call(["rm", "-r " + directory])
-		subprocess.call(["mkdir", directory])
-	crumDataGen(allDNAGB,ncRNAGB,typeFastaIn,filePrefix,directory)
-	nHold = directory+"DATA_"+filePrefix+"_neg_hold.fa"
-	pHold = directory+"DATA_"+filePrefix+"_pos_hold.fa"
-	nTrain = directory+"DATA_"+filePrefix+"_neg_train.fa"
-	pTrain = directory+"DATA_"+filePrefix+"_pos_train.fa"
-	for i in range(2,kmerLen+1):
-		crumInputGen(i,directory,filePrefix,nHold,pHold,nTrain,pTrain)
-
-#runCrumInputGen("cd_uni_1",cdFastaGB,5)
-#runCrumInputGen("haca_uni_1",hacaFastaGB,5)
-def nFoldCrumInputGen(nFolds,allIn,ncIn,typeFastaIn,filePrefix,kmerSize):
-	directory = "./" + filePrefix + "/"
-	if subprocess.call(["mkdir", directory]) != 0:
-		print directory + " exists... clean up" 
-		subprocess.call(["rm", "-r ", directory])
-		subprocess.call(["mkdir", directory])
-	foldN = nFolds;
-	#data in
-	print "reading files and generating neg seqs\n"
-	pHead,pSeq = trainHoldSplit.fastaRead(typeFastaIn,True,False)
-	nHead,nSeq = negativeDataGen.compileData(len(pSeq),ncRNAGB,40,ncIn,40,True,20,True,False)
-	#randomizing for splits
-	print "randomizing for splits\n"
-	pHead,pSeq,no1,no2 = trainHoldSplit.randomSelect(0.0,pHead,pSeq,True,False)
-	nHead,nSeq,no1,no2 = trainHoldSplit.randomSelect(0.0,nHead,nSeq,True,False)
-	#print nHead
-	#print pHead
-	print "length n head:", len(nHead),"\nphead:",len(pHead),"\nnSeq",len(nSeq),"\npSeq",len(pSeq),"\n"
-
-
-	#creating a cross fold set
-	pVerList = []
-	nVerList = []
-	divCount = (len(pSeq)-len(pSeq)%foldN)/foldN
-	print "popping for the crossfold stuff\ndivcount is:",divCount,"\n"
-	while(len(pVerList)<foldN):
-		tempNHead = []
-		tempPHead = []
-		tempNSeq = []
-		tempPSeq = []
-		for i in range(0,divCount):
-			tempNHead.append(nHead.pop())
-			tempPHead.append(pHead.pop())
-			tempNSeq.append(nSeq.pop())
-			tempPSeq.append(pSeq.pop())
-			#print i
-		#print tempPSeq
-		#print tempNSeq
-		pVerList.append([tempPHead,tempPSeq])
-		nVerList.append([tempNHead,tempNSeq])
-		#print "sublist:", len(pVerList[len(pVerList)-1][0]),"\ntemp seq L", len(tempPSeq)
-	functionList = []
-	#creates files for crossfold cases
-	print "creating files for each crossfold case\n"
-	for i in range(0,len(pVerList)):
-		#print "\npverlist: ",len(pVerList), ":",str(i)
-		nHold = nVerList.pop(i)
-		#print "nHold Head:", nHold[0],"\nnHold Seq:",nHold[1]
-		pHold = pVerList.pop(i)
-		#print "pHold Head:", pHold[0],"\npHold Seq:",pHold[1]
-		#print "phold",len(pHold), "\n"
-		nTrainHead	= []
-		nTrainSeq = []
-		pTrainHead = []
-		pTrainSeq = []
-		print "makeTrain: ",len(pVerList), ":",str(i)
-		for j in range(0,len(pVerList)):
-			#print "makeTrain: ",len(pVerList), ":",str(i), ":", str(j)
-			for k in range(0,len(nVerList[j][0])):
-				nTrainHead.append(nVerList[j][0][k])
-				#print "neg Head:",nVerList[j][0][k]
-				nTrainSeq.append(nVerList[j][1][k])
-				#print "neg Seq:",nVerList[j][1][k]
-				pTrainHead.append(pVerList[j][0][k])
-				#print "pos Head:",pVerList[j][0][k]
-				pTrainSeq.append(pVerList[j][1][k])
-				#print "pos Seq:",pVerList[j][1][k]
-		#print nTrainHead
-		#print nTrainSeq
-		#print pTrainHead
-		#print pTrainSeq
-		print "length p train: ",len(pTrainSeq),"\nlength phold: ",len(pHold[0]),"\ntotal:", str(len(pTrainSeq)+len(pHold[0]))
-		functionName = filePrefix + "_10fh" + str(i)
-		crumInputGen(kmerSize,directory,functionName,nHold,pHold,[nTrainHead,nTrainSeq],[pTrainHead,pTrainSeq])
-		print functionName
-		functionList.append(functionName)
-		#print "before reinsert:", len(pVerList)
-		pVerList.insert(i,pHold)
-		nVerList.insert(i,nHold)  
-		#print "after reinsert:", len(pVerList)
-	masterName = filePrefix + "_10foldMaster"
-	print(len(pSeq))
+def writeToMasterMfile(functionNameL,batchName,directory,masterName):
 	mTemplate = open("TEMPLATE_ncRNA_foldMaster.m")
-	mFile = open((directory + masterName + ".m"), 'w')
-	matlabBatch = ""
-	errorName = "totalErr_" + filePrefix;
-	for name in functionList:
-		matlabBatch += "[errTest_" + name + ",errTrain_" + name +  "] = " + name + "();\n" + errorName + "= [" + errorName+ ";[errTest_" + name + ",errTrain_" + name +  "]];\n"
+	mFile = open(("./" + directory + "/" + masterName + ".m"), 'a')
 	for line in mTemplate:
-		line = line.replace("%ERRNAME%",  errorName)
-		line = line.replace("%FUNCTIONBATCH%",matlabBatch)
-		mFile.write(line)
+		lineOut = line.replace("%BATCHNAME%",  batchName)
+		if lineOut.find("%FUNCTIONNAME%") > 0:
+			lineTemp = lineOut
+			lineOut = ""
+			for functionName in functionNameL:
+				lineOut += (lineTemp.replace("%FUNCTIONNAME%", functionName).replace(";",";\n"))
+		mFile.write(lineOut)
 	mFile.close()
 	mTemplate.close()
-	
-#nFoldCrumInputGen(10,allDNAGB,ncRNAGB,hacaFastaGB,"haca_1_k2_10f",2)
-#nFoldCrumInputGen(10,allDNAGB,ncRNAGB,hacaFastaGB,"haca_1_k3_10f",3)
-#nFoldCrumInputGen(10,allDNAGB,ncRNAGB,hacaFastaGB,"haca_1_k4_10f",4)
-nFoldCrumInputGen(10,allDNAGB,ncRNAGB,hacaFastaGB,"haca_1_k5_10f",5)
-#nFoldCrumInputGen(10,allDNAGB,ncRNAGB,hacaFastaGB,"haca_1_k6_10f",6)
+		
+		
 
-#nFoldCrumInputGen(10,allDNAGB,ncRNAGB,cdFastaGB,"cd_1_k2_10f",2)
-#nFoldCrumInputGen(10,allDNAGB,ncRNAGB,cdFastaGB,"cd_1_k3_10f",3)
-#nFoldCrumInputGen(10,allDNAGB,ncRNAGB,cdFastaGB,"cd_1_k4_10f",4)
-nFoldCrumInputGen(10,allDNAGB,ncRNAGB,cdFastaGB,"cd_1_k5_10f",5)
-#nFoldCrumInputGen(10,allDNAGB,ncRNAGB,cdFastaGB,"cd_1_k6_10f",6)
+maxWindow = 4
+prefix = "haca-1"
+foldN = 10
+directory = prefix
+makeDirectory(directory)
+masterName = "run_" + prefix
 
-#subprocess.call(["usearch8.0.1623_i86linux32", "-derep_fulllength", testName, "-strand", "both", "-fastaout" , "unique_" + testName])
+print "reading in fastas..."
+#read and generate
+pHead,pSeq = fastaU.read(hacaFastaGB,True,False)
+nHead,nSeq = negativeDataGen.compileData(len(pSeq),ncRNAGB,40,allDNAGB,40,True,20,True,False)
+
+print "randomizing data..."
+#randomize the data
+pHead,pSeq = randomizeSeqs(pHead,pSeq)
+nHead,nSeq = randomizeSeqs(nHead,nSeq)
+
+print "making type lists..."
+#make type lists
+pType = [1]*len(pHead)
+nType = [0]*len(nHead)
+
+#make holdouts
+print "spliting for fold validation..."
+pHeadL,pSeqL,pTypeL = foldSplit(foldN,pHead,pSeq,pType)
+nHeadL,nSeqL,nTypeL = foldSplit(foldN,nHead,nSeq,nType)
+
+print "writing splits to fastas..."
+for i in range(len(pHeadL)):
+	fastaU.write(pHeadL[i],pSeqL[i],("./" + directory + "/fold-" + str(i) + "_pos_" + prefix + ".fasta"))
+
+for i in range(len(nHeadL)):
+	fastaU.write(nHeadL[i],nSeqL[i],("./" + directory + "/fold-" + str(i) + "_neg_" + prefix + ".fasta"))
+
+print "generating scripts per window width..."
+for window in range(maxWindow):
+	print "for window " + str(window) + "..."
+	#gather features		
+	pFeatL = []
+	nFeatL = []
+	print "getting features..."
+	for seqL in pSeqL:
+		pFeatT = []
+		for seq in seqL:
+			pFeatT.append(str(snoPatternSplit.makeFeatureVector(seq,window+1)))
+		pFeatL.append(pFeatT)
+		
+	for seqL in nSeqL:
+		nFeatT = []
+		for seq in seqL:
+			nFeatT.append(str(snoPatternSplit.makeFeatureVector(seq,window+1)))
+		nFeatL.append(nFeatT)
+		
+	print "done."
+	#set up a directory
+	subPrefix = "window-" + str(window+1)
+	subDirectory = directory + "/" + subPrefix
+	makeDirectory(subDirectory)
+	batchName = (subPrefix + "_" + prefix)
+	functionBatchL = []
+	for j in range(foldN):
+		print "writing files for fold " + str(j) + "..."
+		cpHeadL = pHeadL[:]
+		cpTypeL = pTypeL[:]
+		cpFeatL = pFeatL[:]
+		cnHeadL = nHeadL[:]
+		cnTypeL = nTypeL[:]
+		cnFeatL = nFeatL[:]
+		functionName = ("fold_" + str(j) + "_" + subPrefix + "_" + prefix).replace("-","_")
+		functionBatchL.append(functionName)
+		holdHead = cpHeadL.pop(j) + cnHeadL.pop(j)
+		trainHeadL = cpHeadL + cnHeadL
+		trainHead = []
+		for tHead in trainHeadL:
+			trainHead += tHead
+			
+		holdFeat = cpFeatL.pop(j) + cnFeatL.pop(j)
+		trainFeat = []
+		trainFeatL = cpFeatL + cnFeatL
+		for tFeat in trainFeatL:
+			trainFeat += tFeat
+			
+		holdType = cpTypeL.pop(j) + cnTypeL.pop(j)
+		trainType = []
+		trainTypeL = cpTypeL + cnTypeL
+		for tType in trainTypeL:
+			trainType += tType
+		writeCrumInput(trainHead,trainFeat,trainType,holdHead,holdFeat,holdType,(subDirectory + "/"),functionName)
+	writeToMasterMfile(functionBatchL,batchName.replace("-","_").replace("window_","w"),directory,masterName.replace("-","_"))
+subprocess.call(["chmod", "775","-R", ("./" + directory + "/")])
 
 
+#################################################################################################################################
+
+
+maxWindow = 4
+prefix = "cd-1"
+foldN = 10
+directory = prefix
+makeDirectory(directory)
+masterName = "run_" + prefix
+
+print "reading in fastas..."
+#read and generate
+pHead,pSeq = fastaU.read(cdFastaGB,True,False)
+nHead,nSeq = negativeDataGen.compileData(len(pSeq),ncRNAGB,40,allDNAGB,40,True,20,True,False)
+
+print "randomizing data..."
+#randomize the data
+pHead,pSeq = randomizeSeqs(pHead,pSeq)
+nHead,nSeq = randomizeSeqs(nHead,nSeq)
+
+print "making type lists..."
+#make type lists
+pType = [1]*len(pHead)
+nType = [0]*len(nHead)
+
+#make holdouts
+print "spliting for fold validation..."
+pHeadL,pSeqL,pTypeL = foldSplit(foldN,pHead,pSeq,pType)
+nHeadL,nSeqL,nTypeL = foldSplit(foldN,nHead,nSeq,nType)
+
+print "writing splits to fastas..."
+for i in range(len(pHeadL)):
+	fastaU.write(pHeadL[i],pSeqL[i],("./" + directory + "/fold-" + str(i) + "_pos_" + prefix + ".fasta"))
+
+for i in range(len(nHeadL)):
+	fastaU.write(nHeadL[i],nSeqL[i],("./" + directory + "/fold-" + str(i) + "_neg_" + prefix + ".fasta"))
+
+print "generating scripts per window width..."
+for window in range(maxWindow):
+	print "for window " + str(window) + "..."
+	#gather features		
+	pFeatL = []
+	nFeatL = []
+	print "getting features..."
+	for seqL in pSeqL:
+		pFeatT = []
+		for seq in seqL:
+			pFeatT.append(str(snoPatternSplit.makeFeatureVector(seq,window+1)))
+		pFeatL.append(pFeatT)
+		
+	for seqL in nSeqL:
+		nFeatT = []
+		for seq in seqL:
+			nFeatT.append(str(snoPatternSplit.makeFeatureVector(seq,window+1)))
+		nFeatL.append(nFeatT)
+		
+	print "done."
+	#set up a directory
+	subPrefix = "window-" + str(window+1)
+	subDirectory = directory + "/" + subPrefix
+	makeDirectory(subDirectory)
+	batchName = (subPrefix + "_" + prefix)
+	functionBatchL = []
+	for j in range(foldN):
+		print "writing files for fold " + str(j) + "..."
+		cpHeadL = pHeadL[:]
+		cpTypeL = pTypeL[:]
+		cpFeatL = pFeatL[:]
+		cnHeadL = nHeadL[:]
+		cnTypeL = nTypeL[:]
+		cnFeatL = nFeatL[:]
+		functionName = ("fold_" + str(j) + "_" + subPrefix + "_" + prefix).replace("-","_")
+		functionBatchL.append(functionName)
+		holdHead = cpHeadL.pop(j) + cnHeadL.pop(j)
+		trainHeadL = cpHeadL + cnHeadL
+		trainHead = []
+		for tHead in trainHeadL:
+			trainHead += tHead
+			
+		holdFeat = cpFeatL.pop(j) + cnFeatL.pop(j)
+		trainFeat = []
+		trainFeatL = cpFeatL + cnFeatL
+		for tFeat in trainFeatL:
+			trainFeat += tFeat
+			
+		holdType = cpTypeL.pop(j) + cnTypeL.pop(j)
+		trainType = []
+		trainTypeL = cpTypeL + cnTypeL
+		for tType in trainTypeL:
+			trainType += tType
+		writeCrumInput(trainHead,trainFeat,trainType,holdHead,holdFeat,holdType,(subDirectory + "/"),functionName)
+	writeToMasterMfile(functionBatchL,batchName.replace("-","_").replace("window_","w"),directory,masterName.replace("-","_"))
+subprocess.call(["chmod", "775","-R", ("./" + directory + "/")])
 
 
 

@@ -1,6 +1,12 @@
-%ERRNAME% = [];
 
-%FUNCTIONBATCH%
+%%BATCHNAME%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+tFp_%BATCHNAME% = [];
+tFn_%BATCHNAME% = [];
+hFp_%BATCHNAME% = [];
+hFn_%BATCHNAME% = [];
 
-fprintf('Train Error: %.2f%%\n', mean(%ERRNAME%(:,2)));
-fprintf('Test Error: %.2f%%\n', mean(%ERRNAME%(:,1)));
+[trainFalsePos,trainFalseNeg,testFalsePos,testFalseNeg] = %FUNCTIONNAME%;tFp_%BATCHNAME% = [tFp_%BATCHNAME%, trainFalsePos];tFn_%BATCHNAME% = [tFn_%BATCHNAME%, trainFalseNeg];hFp_%BATCHNAME% = [hFp_%BATCHNAME%, testFalsePos];hFn_%BATCHNAME% = [hFn_%BATCHNAME%, testFalseNeg];
+
+tErr_%BATCHNAME% = [tFp_%BATCHNAME%;tFn_%BATCHNAME%];
+hErr_%BATCHNAME% = [hFp_%BATCHNAME%;hFn_%BATCHNAME%];
+
